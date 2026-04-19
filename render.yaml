@@ -1,0 +1,29 @@
+# ── FILE: render.yaml ──
+services:
+  - type: web
+    name: networkaudit-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: NVD_API_KEY
+        sync: false
+      - key: ABUSEIPDB_KEY
+        sync: false
+      - key: OTX_API_KEY
+        sync: false
+      - key: VIRUSTOTAL_KEY
+        sync: false
+      - key: THREATFOX_KEY
+        sync: false
+      - key: URLSCAN_KEY
+        sync: false
+      - key: IPLOCATE_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
