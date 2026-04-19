@@ -1,10 +1,16 @@
-// ── FILE: backend/src/routes/scan.ts ──
-
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { scanLimiter } from '../middleware/rateLimit'
 import { validate } from '../middleware/validate'
+import { getCVEsByKeyword } from '../services/nvdService'
+import { checkIP as checkAbuseIP } from '../services/abuseIPService'
+import { checkIP as checkOTX } from '../services/otxService'
+import { lookupIP } from '../services/iplocateService'
+import { scoreNetwork } from '../services/riskScorer'
+import { insertScanResult } from '../db/queries'
+import { sha256Hash } from '../utils/network'
+import type { ScanInput, Finding } from '../types/index'
 
 const router = Router()
 
@@ -20,17 +26,58 @@ export const ScanInputSchema = z.object({
   routerVendor: z.string().optional(),
 }).strict()
 
-router.post('/', scanLimiter, validate(ScanInputSchema), async (_req: Request, res: Response): Promise<void> => {
-  // TODO: implement in Session 2
-  // 1. Parse validated body as ScanInput
-  // 2. TODO: call riskScorer.scoreNetwork()
-  // 3. TODO: call nvdService.getCVEsByKeyword() if routerVendor present
-  // 4. TODO: call abuseIPService.checkIP(gatewayIP)
-  // 5. TODO: call otxService.checkIP(gatewayIP)
-  // 6. TODO: call iplocateService.lookupIP(gatewayIP)
-  // 7. TODO: aggregate findings, compute overallScore
-  // 8. TODO: SHA256-anonymize gatewayIP+deviceIP, store in scan_results
-  res.json({ findings: [], overallScore: 10.0, scannedAt: new Date().toISOString() })
+const SEVERITY_ORDER: Record<Finding['severity'], number> = {
+  CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4,
+}
+
+router.post('/', scanLimiter, validate(ScanInputSchema), async (req: Request, res: Response): Promise<void> => {
+  const input = req.body as ScanInput
+  const fingerprint = sha256Hash(input.gatewayIP + input.deviceIP)
+
+  const [cveSettled, abuseSettled, otxSettled] = await Promise.allSettled([
+    input.routerVendor ? getCVEsByKeyword(input.routerVendor) : Promise.resolve([]),
+    checkAbuseIP(input.gatewayIP),
+    checkOTX(input.gatewayIP),
+    lookupIP(input.gatewayIP),
+  ])
+
+  const cves = cveSettled.status === 'fulfilled' ? cveSettled.value : []
+  const abuseData = abuseSettled.status === 'fulfilled' ? abuseSettled.value : null
+  const otxData = otxSettled.status === 'fulfilled' ? otxSettled.value : null
+
+  const { findings, overallScore } = scoreNetwork(input, cves, abuseData, otxData)
+
+  const sortedFindings: Finding[] = [...findings].sort(
+    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
+  )
+
+  try {
+    await insertScanResult({
+      deviceFingerprint: fingerprint,
+      networkType: 'WIFI',
+      securityType: input.securityType,
+      gatewayIp: input.gatewayIP,
+      dnsServers: input.dnsServers,
+      findings: sortedFindings,
+      overallScore,
+      scannedAt: new Date(),
+    })
+  } catch (err) {
+    console.error('Failed to store scan result:', err instanceof Error ? err.message : err)
+  }
+
+  res.json({
+    findings: sortedFindings,
+    overallScore,
+    scannedAt: new Date().toISOString(),
+    ...(abuseData ? {
+      gatewayReputation: {
+        abuseScore: abuseData.abuseScore,
+        country: abuseData.countryCode,
+        isp: abuseData.isp,
+      }
+    } : {}),
+  })
 })
 
 export default router

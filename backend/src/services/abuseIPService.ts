@@ -1,4 +1,5 @@
-// ── FILE: backend/src/services/abuseIPService.ts ──
+import axios from 'axios'
+import { isPrivateIP } from '../utils/network'
 
 export interface AbuseIPResult {
   abuseScore: number
@@ -8,12 +9,34 @@ export interface AbuseIPResult {
   usageType: string
 }
 
-export async function checkIP(_ip: string): Promise<AbuseIPResult | null> {
-  // TODO: implement in Session 2
-  // TODO: Skip RFC1918 private IPs — return null immediately
-  //       RFC1918: 10.x.x.x, 172.16-31.x.x, 192.168.x.x
-  // TODO: Call https://api.abuseipdb.com/api/v2/check
-  //       Params: ipAddress, maxAgeInDays=90, verbose=true
-  //       Header: Key: process.env.ABUSEIPDB_KEY
-  return null
+export async function checkIP(ip: string): Promise<AbuseIPResult | null> {
+  if (isPrivateIP(ip)) return null
+
+  const apiKey = process.env['ABUSEIPDB_KEY']
+  if (!apiKey) return null
+
+  try {
+    const response = await axios.get<{ data: Record<string, unknown> }>(
+      'https://api.abuseipdb.com/api/v2/check',
+      {
+        params: { ipAddress: ip, maxAgeInDays: 90, verbose: true },
+        headers: { Key: apiKey, Accept: 'application/json' },
+        timeout: 10000,
+      }
+    )
+
+    const data = response.data?.data
+    if (!data) return null
+
+    return {
+      abuseScore: data['abuseConfidenceScore'] as number,
+      totalReports: data['totalReports'] as number,
+      countryCode: data['countryCode'] as string,
+      isp: data['isp'] as string,
+      usageType: data['usageType'] as string,
+    }
+  } catch (err) {
+    console.error('abuseIPService error:', err instanceof Error ? err.message : err)
+    return null
+  }
 }

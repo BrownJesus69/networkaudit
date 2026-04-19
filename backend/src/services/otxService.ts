@@ -1,15 +1,34 @@
-// ── FILE: backend/src/services/otxService.ts ──
+import axios from 'axios'
+import { isPrivateIP } from '../utils/network'
 
 export interface OTXResult {
   pulseCount: number
   tags: string[]
 }
 
-export async function checkIP(_ip: string): Promise<OTXResult | null> {
-  // TODO: implement in Session 2
-  // TODO: Skip RFC1918 private IPs — return null immediately
-  // TODO: Call https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general
-  //       Header: X-OTX-API-KEY: process.env.OTX_API_KEY
-  // TODO: Flag if pulseCount > 0
-  return null
+export async function checkIP(ip: string): Promise<OTXResult | null> {
+  if (isPrivateIP(ip)) return null
+
+  const apiKey = process.env['OTX_API_KEY']
+  if (!apiKey) return null
+
+  try {
+    const response = await axios.get<Record<string, unknown>>(
+      `https://otx.alienvault.com/api/v1/indicators/IPv4/${ip}/general`,
+      {
+        headers: { 'X-OTX-API-KEY': apiKey },
+        timeout: 10000,
+      }
+    )
+
+    const pulseInfo = response.data['pulse_info'] as Record<string, unknown> | undefined
+
+    return {
+      pulseCount: (pulseInfo?.['count'] as number) ?? 0,
+      tags: (response.data['tags'] as string[]) ?? [],
+    }
+  } catch (err) {
+    console.error('otxService error:', err instanceof Error ? err.message : err)
+    return null
+  }
 }
