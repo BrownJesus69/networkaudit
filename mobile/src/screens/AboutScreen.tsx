@@ -13,10 +13,16 @@ const HOW_IT_WORKS = [
   { step: 4, text: 'CVSS-scored findings returned with remediation steps' },
 ]
 
-const APIS_USED = ['NVD NIST', 'AbuseIPDB', 'AlienVault OTX', 'iplocate.io', 'ThreatFox']
+const APIS_USED = [
+  { name: 'NVD NIST', url: 'https://nvd.nist.gov/developers/vulnerabilities' },
+  { name: 'AbuseIPDB', url: 'https://www.abuseipdb.com' },
+  { name: 'AlienVault OTX', url: 'https://otx.alienvault.com' },
+  { name: 'iplocate.io', url: 'https://www.iplocate.io' },
+  { name: 'ThreatFox', url: 'https://threatfox.abuse.ch' },
+]
 
 function openLink(url: string) {
-  Linking.openURL(url).catch(() => {})
+  Linking.openURL(url).catch(() => null)
 }
 
 export default function AboutScreen() {
@@ -70,11 +76,12 @@ export default function AboutScreen() {
         {/* APIs used */}
         <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>APIs Used</Text>
-          {APIS_USED.map(api => (
-            <View key={api} style={styles.apiRow}>
+          {APIS_USED.map(({ name, url }) => (
+            <TouchableOpacity key={name} style={styles.apiRow} onPress={() => openLink(url)}>
               <View style={[styles.apiBullet, { backgroundColor: colors.surface }]} />
-              <Text style={[styles.body, { color: colors.textSecondary }]}>{api}</Text>
-            </View>
+              <Text style={[styles.body, { color: colors.textSecondary, flex: 1 }]}>{name}</Text>
+              <Ionicons name="open-outline" size={14} color={colors.textMuted} />
+            </TouchableOpacity>
           ))}
         </View>
 
@@ -146,7 +153,7 @@ const styles = StyleSheet.create({
   body: { fontSize: 13, lineHeight: 20 },
   linkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   linkText: { color: '#4A7FB5', fontSize: 14, marginLeft: 6 },
-  apiRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  apiRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, width: '100%' },
   apiBullet: { width: 6, height: 6, borderRadius: 3, marginRight: 10 },
   footer: { textAlign: 'center', fontSize: 12, marginTop: 8 },
 })

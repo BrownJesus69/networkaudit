@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
+import React, { useState, useRef, useEffect } from 'react'
+import { View, Text, TouchableOpacity, Animated, Easing, StyleSheet } from 'react-native'
 import { useTheme } from '../context/ThemeContext'
 import { SeverityColors } from '../constants/Colors'
 import type { Finding } from '../types/index'
@@ -12,8 +12,18 @@ interface Props {
 export function SeverityCard({ finding, expanded: initial = false }: Props) {
   const { colors } = useTheme()
   const [expanded, setExpanded] = useState(initial)
+  const expandAnim = useRef(new Animated.Value(initial ? 1 : 0)).current
   const severityColor = SeverityColors[finding.severity] ?? '#888888'
   const remColor = finding.severity === 'LOW' || finding.severity === 'INFO' ? '#4CAF7D' : colors.textSecondary
+
+  useEffect(() => {
+    Animated.timing(expandAnim, {
+      toValue: expanded ? 1 : 0,
+      duration: 250,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: false,
+    }).start()
+  }, [expanded, expandAnim])
 
   return (
     <TouchableOpacity
@@ -38,22 +48,25 @@ export function SeverityCard({ finding, expanded: initial = false }: Props) {
         >
           {finding.description}
         </Text>
-        {expanded && (
-          <>
-            <View style={[styles.remBox, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.remText, { color: remColor }]}>→ {finding.remediation}</Text>
+        <Animated.View
+          style={{
+            maxHeight: expandAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 500] }),
+            overflow: 'hidden',
+          }}
+        >
+          <View style={[styles.remBox, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.remText, { color: remColor }]}>→ {finding.remediation}</Text>
+          </View>
+          {finding.cveIds && finding.cveIds.length > 0 && (
+            <View style={styles.cveRow}>
+              {finding.cveIds.map(id => (
+                <View key={id} style={styles.cvePill}>
+                  <Text style={styles.cveText}>{id}</Text>
+                </View>
+              ))}
             </View>
-            {finding.cveIds && finding.cveIds.length > 0 && (
-              <View style={styles.cveRow}>
-                {finding.cveIds.map(id => (
-                  <View key={id} style={styles.cvePill}>
-                    <Text style={styles.cveText}>{id}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </>
-        )}
+          )}
+        </Animated.View>
       </View>
     </TouchableOpacity>
   )

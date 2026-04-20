@@ -18,6 +18,8 @@ import { RiskGauge } from '../components/RiskGauge'
 import { NetworkInfoPill } from '../components/NetworkInfoPill'
 import { SkeletonCard } from '../components/SkeletonCard'
 import { EmptyState } from '../components/EmptyState'
+import { shareReport } from '../utils/shareReport'
+import type { ScanHistoryEntry } from '../types/index'
 
 export default function ScanScreen() {
   const { colors, isDark, toggle } = useTheme()
@@ -29,10 +31,25 @@ export default function ScanScreen() {
     f => f.severity === 'CRITICAL' || f.severity === 'HIGH'
   ).length ?? 0
 
+  const isOffline = networkInfo != null && !networkInfo.isConnected
+
   async function onRefresh() {
     setRefreshing(true)
     await refetch()
     setRefreshing(false)
+  }
+
+  function onSharePress() {
+    if (!result || !networkInfo) return
+    const entry: ScanHistoryEntry = {
+      id: Date.now().toString(),
+      scannedAt: result.scannedAt,
+      ssid: networkInfo.ssid,
+      overallScore: result.overallScore,
+      findings: result.findings,
+      networkInfo,
+    }
+    void shareReport(entry)
   }
 
   return (
@@ -42,9 +59,16 @@ export default function ScanScreen() {
           <Text style={[styles.appName, { color: colors.textPrimary }]}>NetworkAudit</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Wi-Fi Security Scanner</Text>
         </View>
-        <TouchableOpacity onPress={toggle} style={styles.themeBtn}>
-          <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {result != null && (
+            <TouchableOpacity onPress={onSharePress} style={styles.headerBtn}>
+              <Ionicons name="share-outline" size={22} color={colors.textPrimary} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={toggle} style={styles.headerBtn}>
+            <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -65,23 +89,35 @@ export default function ScanScreen() {
           </View>
         )}
 
-        <TouchableOpacity
-          style={[styles.scanBtn, { backgroundColor: colors.scanButton }, loading && styles.scanBtnDisabled]}
-          onPress={() => { if (!loading && networkInfo) runScan(networkInfo) }}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          {loading ? (
-            <>
-              <ActivityIndicator color={colors.scanButtonText} size="small" />
-              <Text style={[styles.scanBtnText, { color: colors.scanButtonText, marginLeft: 10 }]}>
-                Scanning...
+        {isOffline ? (
+          <View style={[styles.offlineCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Ionicons name="warning-outline" size={20} color="#C17D3C" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={[styles.offlineTitle, { color: colors.textPrimary }]}>No Wi-Fi Connection</Text>
+              <Text style={[styles.offlineSub, { color: colors.textSecondary }]}>
+                Connect to a Wi-Fi network to scan
               </Text>
-            </>
-          ) : (
-            <Text style={[styles.scanBtnText, { color: colors.scanButtonText }]}>Scan Network</Text>
-          )}
-        </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.scanBtn, { backgroundColor: colors.scanButton }, loading && styles.scanBtnDisabled]}
+            onPress={() => { if (!loading && networkInfo) runScan(networkInfo) }}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            {loading ? (
+              <>
+                <ActivityIndicator color={colors.scanButtonText} size="small" />
+                <Text style={[styles.scanBtnText, { color: colors.scanButtonText, marginLeft: 10 }]}>
+                  Scanning...
+                </Text>
+              </>
+            ) : (
+              <Text style={[styles.scanBtnText, { color: colors.scanButtonText }]}>Scan Network</Text>
+            )}
+          </TouchableOpacity>
+        )}
 
         {loading && (
           <>
@@ -105,7 +141,7 @@ export default function ScanScreen() {
             </View>
 
             <Text style={[styles.sectionLabel, { color: colors.textSecondary, borderBottomColor: colors.border }]}>
-              FINDINGS <Text style={styles.badge}>{result.findings.length}</Text>
+              FINDINGS {result.findings.length}
             </Text>
 
             {result.findings.length === 0 ? (
@@ -120,7 +156,7 @@ export default function ScanScreen() {
           </>
         )}
 
-        {result == null && !loading && (
+        {result == null && !loading && !isOffline && (
           <EmptyState
             icon="shield-outline"
             title="Ready to Scan"
@@ -144,7 +180,8 @@ const styles = StyleSheet.create({
   },
   appName: { fontSize: 22, fontWeight: '700' },
   subtitle: { fontSize: 12, marginTop: 2 },
-  themeBtn: { padding: 4 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerBtn: { padding: 4 },
   content: { padding: 16, paddingBottom: 32 },
   errorCard: {
     flexDirection: 'row',
@@ -158,6 +195,16 @@ const styles = StyleSheet.create({
   errorText: { flex: 1, fontSize: 14 },
   dismissBtn: { paddingHorizontal: 4 },
   dismissText: { color: '#C0392B', fontSize: 13, fontWeight: '600' },
+  offlineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 16,
+  },
+  offlineTitle: { fontSize: 14, fontWeight: '600' },
+  offlineSub: { fontSize: 12, marginTop: 2 },
   scanBtn: {
     height: 56,
     borderRadius: 12,
@@ -179,5 +226,4 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     borderBottomWidth: 1,
   },
-  badge: { fontSize: 10, fontWeight: '700' },
 })
