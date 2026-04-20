@@ -11,6 +11,9 @@ export interface ScanInput {
   deviceIP: string
   ssid?: string        // never stored in DB
   routerVendor?: string
+  connectionType?: 'WIFI' | 'HOTSPOT' | 'ETHERNET'
+  signalStrength?: number
+  isCarrierDNS?: boolean
 }
 
 export interface Finding {
@@ -27,6 +30,9 @@ export interface ScanResult {
   findings: Finding[]
   overallScore: number
   scannedAt: string    // ISO string
+  score: number
+  grade: string
+  flags: string[]
   gatewayReputation?: {
     abuseScore: number
     country: string

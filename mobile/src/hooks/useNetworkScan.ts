@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import * as Haptics from 'expo-haptics'
 import { postScan } from '../services/api'
 import { useScanHistory } from './useScanHistory'
-import type { ScanResult, NetworkInfo } from '../types/index'
+import type { ScanResult, NetworkInfo, ScanInput } from '../types/index'
 
 const OUI_MAP: Record<string, string> = {
   '00:50:f2': 'TP-Link', '00:e0:4c': 'TP-Link', 'f8:1a:67': 'TP-Link',
@@ -28,20 +28,16 @@ export function useNetworkScan() {
   const [state, setState] = useState<ScanState>({ loading: false, result: null, error: null })
   const { addEntry } = useScanHistory()
 
-  const runScan = useCallback(async (networkInfo: NetworkInfo) => {
+  const runScan = useCallback(async (payload: ScanInput, networkInfo: NetworkInfo) => {
     if (!networkInfo.isConnected) {
       setState(s => ({ ...s, error: 'Connect to a Wi-Fi network to scan' }))
       return
     }
     setState({ loading: true, error: null, result: null })
     try {
-      const scanInput = {
-        securityType: networkInfo.securityType,
-        gatewayIP: networkInfo.gatewayIP,
-        dnsServers: networkInfo.dnsServers,
-        deviceIP: networkInfo.deviceIP,
-        ...(networkInfo.ssid != null ? { ssid: networkInfo.ssid } : {}),
-        routerVendor: guessVendor(networkInfo.bssid),
+      const scanInput: ScanInput = {
+        ...payload,
+        routerVendor: payload.routerVendor ?? guessVendor(networkInfo.bssid),
       }
       const result = await postScan(scanInput)
       await addEntry({

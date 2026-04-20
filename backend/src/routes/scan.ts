@@ -8,6 +8,7 @@ import { checkIP as checkAbuseIP } from '../services/abuseIPService'
 import { checkIP as checkOTX } from '../services/otxService'
 import { lookupIP } from '../services/iplocateService'
 import { scoreNetwork } from '../services/riskScorer'
+import { computeSecurityScore } from '../services/scoring'
 import { insertScanResult } from '../db/queries'
 import { sha256Hash } from '../utils/network'
 import type { ScanInput, Finding } from '../types/index'
@@ -24,6 +25,9 @@ export const ScanInputSchema = z.object({
   deviceIP: ipSchema,
   ssid: z.string().optional(),
   routerVendor: z.string().optional(),
+  connectionType: z.enum(['WIFI', 'HOTSPOT', 'ETHERNET']).default('WIFI'),
+  signalStrength: z.number().min(-120).max(0).optional(),
+  isCarrierDNS: z.boolean().optional(),
 }).strict()
 
 const SEVERITY_ORDER: Record<Finding['severity'], number> = {
@@ -46,6 +50,14 @@ router.post('/', scanLimiter, validate(ScanInputSchema), async (req: Request, re
   const otxData = otxSettled.status === 'fulfilled' ? otxSettled.value : null
 
   const { findings, overallScore } = scoreNetwork(input, cves, abuseData, otxData)
+  const { score, grade, flags } = computeSecurityScore({
+    securityType: input.securityType,
+    connectionType: input.connectionType ?? 'WIFI',
+    ssid: input.ssid,
+    signalStrength: input.signalStrength,
+    dnsServers: input.dnsServers,
+    isCarrierDNS: input.isCarrierDNS,
+  })
 
   const sortedFindings: Finding[] = [...findings].sort(
     (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
@@ -70,6 +82,9 @@ router.post('/', scanLimiter, validate(ScanInputSchema), async (req: Request, re
     findings: sortedFindings,
     overallScore,
     scannedAt: new Date().toISOString(),
+    score,
+    grade,
+    flags,
     ...(abuseData ? {
       gatewayReputation: {
         abuseScore: abuseData.abuseScore,

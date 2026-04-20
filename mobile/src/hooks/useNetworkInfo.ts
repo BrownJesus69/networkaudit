@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import NetInfo from '@react-native-community/netinfo'
 import * as Network from 'expo-network'
-import type { NetworkInfo, SecurityType } from '../types/index'
+import type { NetworkInfo, SecurityType, ScanInput } from '../types/index'
 
 function mapSecurity(details: Record<string, unknown> | null): SecurityType {
   const sec = typeof details?.['security'] === 'string' ? details['security'] : ''
@@ -16,6 +16,40 @@ function mapSecurity(details: Record<string, unknown> | null): SecurityType {
 function deriveGateway(ip: string): string {
   const parts = ip.split('.')
   return parts.length === 4 ? `${parts[0]}.${parts[1]}.${parts[2]}.1` : '192.168.1.1'
+}
+
+export async function gatherNetworkPayload(): Promise<ScanInput> {
+  const state = await NetInfo.fetch()
+  let deviceIP = '0.0.0.0'
+  try { deviceIP = await Network.getIpAddressAsync() } catch { /* fallback */ }
+
+  const details = (state.details ?? null) as Record<string, unknown> | null
+  const gatewayIP = deviceIP !== '0.0.0.0' ? deriveGateway(deviceIP) : '192.168.1.1'
+
+  const isCellular = state.type === 'cellular'
+  const isExpensive = details?.['isConnectionExpensive'] === true
+  const connectionType: 'WIFI' | 'HOTSPOT' | 'ETHERNET' =
+    state.type === 'ethernet' ? 'ETHERNET' :
+    isExpensive ? 'HOTSPOT' : 'WIFI'
+
+  const rawStrength = details?.['strength']
+  const signalStrength = typeof rawStrength === 'number' && rawStrength < 0
+    ? rawStrength
+    : undefined
+
+  const ssid = (details?.['ssid'] as string | null | undefined) ?? undefined
+
+  const payload: ScanInput = {
+    securityType: mapSecurity(details),
+    gatewayIP,
+    dnsServers: [gatewayIP],
+    deviceIP,
+    connectionType,
+    isCarrierDNS: isCellular || undefined,
+  }
+  if (ssid != null) payload.ssid = ssid
+  if (signalStrength !== undefined) payload.signalStrength = signalStrength
+  return payload
 }
 
 export function useNetworkInfo() {

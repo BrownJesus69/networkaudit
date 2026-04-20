@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../context/ThemeContext'
-import { useNetworkInfo } from '../hooks/useNetworkInfo'
+import { useNetworkInfo, gatherNetworkPayload } from '../hooks/useNetworkInfo'
 import { useNetworkScan } from '../hooks/useNetworkScan'
 import { SeverityCard } from '../components/SeverityCard'
 import { RiskGauge } from '../components/RiskGauge'
@@ -21,6 +21,14 @@ import { SkeletonCard } from '../components/SkeletonCard'
 import { EmptyState } from '../components/EmptyState'
 import { shareReport } from '../utils/shareReport'
 import type { ScanHistoryEntry } from '../types/index'
+
+function gradeColor(grade: string): string {
+  if (grade === 'A') return '#4CAF7D'
+  if (grade === 'B') return '#4A7FB5'
+  if (grade === 'C') return '#C17D3C'
+  if (grade === 'D') return '#E07040'
+  return '#C0392B'
+}
 
 function formatDate(iso: string): string {
   const d = new Date(iso)
@@ -88,7 +96,9 @@ export default function ScanScreen() {
 
   function onScanAgain() {
     reset()
-    if (networkInfo) runScan(networkInfo)
+    if (networkInfo) {
+      void gatherNetworkPayload().then(p => runScan(p, networkInfo))
+    }
   }
 
   return (
@@ -133,7 +143,7 @@ export default function ScanScreen() {
             </TouchableOpacity>
             {networkInfo && (
               <TouchableOpacity
-                onPress={() => { dismissError(); runScan(networkInfo) }}
+                onPress={() => { dismissError(); void gatherNetworkPayload().then(p => runScan(p, networkInfo)) }}
                 style={styles.errorActionBtn}
               >
                 <Text style={styles.retryText}>Retry</Text>
@@ -155,7 +165,7 @@ export default function ScanScreen() {
         ) : (
           <TouchableOpacity
             style={[styles.scanBtn, { backgroundColor: colors.scanButton }, loading && styles.scanBtnDisabled]}
-            onPress={() => { if (!loading && networkInfo) runScan(networkInfo) }}
+            onPress={() => { if (!loading && networkInfo) void gatherNetworkPayload().then(p => runScan(p, networkInfo)) }}
             disabled={loading}
             activeOpacity={0.8}
           >
@@ -194,6 +204,17 @@ export default function ScanScreen() {
               <Text style={[styles.findingSummary, { color: colors.textSecondary }]}>
                 {result.findings.length} finding{result.findings.length !== 1 ? 's' : ''} · {urgentCount} require immediate action
               </Text>
+              {result.grade != null && result.score != null && (
+                <View style={styles.gradeRow}>
+                  <View style={[styles.gradeBadge, { borderColor: gradeColor(result.grade) }]}>
+                    <Text style={[styles.gradeText, { color: gradeColor(result.grade) }]}>{result.grade}</Text>
+                  </View>
+                  <View style={{ marginLeft: 12 }}>
+                    <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>SECURITY SCORE</Text>
+                    <Text style={[styles.scoreNumber, { color: gradeColor(result.grade) }]}>{result.score}/100</Text>
+                  </View>
+                </View>
+              )}
             </View>
 
             <View style={[styles.sectionLabelRow, { borderBottomColor: colors.border }]}>
@@ -211,6 +232,23 @@ export default function ScanScreen() {
               />
             ) : (
               result.findings.map(f => <SeverityCard key={f.id} finding={f} />)
+            )}
+
+            {result.flags != null && result.flags.length > 0 && (
+              <>
+                <View style={[styles.sectionLabelRow, { borderBottomColor: colors.border }]}>
+                  <Text style={[styles.sectionLabelText, { color: colors.textSecondary }]}>FLAGS</Text>
+                  <View style={[styles.countBadge, { backgroundColor: '#C17D3C' }]}>
+                    <Text style={[styles.countBadgeText, { color: '#fff' }]}>{result.flags.length}</Text>
+                  </View>
+                </View>
+                {result.flags.map((flag, i) => (
+                  <View key={i} style={[styles.flagCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Ionicons name="warning-outline" size={14} color="#C17D3C" style={{ marginRight: 8, marginTop: 1 }} />
+                    <Text style={[styles.flagText, { color: colors.textSecondary }]}>{flag}</Text>
+                  </View>
+                ))}
+              </>
             )}
 
             <TouchableOpacity
@@ -306,6 +344,12 @@ const styles = StyleSheet.create({
   sectionLabelText: { fontSize: 10, fontWeight: '700', letterSpacing: 1 },
   countBadge: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   countBadgeText: { fontSize: 9, fontWeight: '700' },
+  gradeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
+  gradeBadge: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  gradeText: { fontSize: 22, fontWeight: '800' },
+  scoreNumber: { fontSize: 18, fontWeight: '700', marginTop: 2 },
+  flagCard: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 10, borderWidth: 1, padding: 10, marginBottom: 6 },
+  flagText: { flex: 1, fontSize: 12, lineHeight: 18 },
   scanAgainBtn: {
     height: 44,
     borderRadius: 12,
