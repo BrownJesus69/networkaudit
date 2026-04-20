@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { View, Text, TouchableOpacity, FlatList, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, Alert, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../context/ThemeContext'
@@ -11,7 +11,7 @@ import type { ScanHistoryEntry } from '../types/index'
 function formatDate(iso: string): string {
   const d = new Date(iso)
   return (
-    d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
+    d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) +
     ', ' +
     d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   )
@@ -28,18 +28,30 @@ function findingSummary(entry: ScanHistoryEntry): string {
 
 export default function HistoryScreen() {
   const { colors } = useTheme()
-  const { history, loadHistory, clearHistory } = useScanHistory()
+  const { history, loading, loadHistory, clearHistory } = useScanHistory()
 
-  useEffect(() => {
-    loadHistory()
-  }, [loadHistory])
+  useEffect(() => { void loadHistory() }, [loadHistory])
+
+  function confirmClear() {
+    Alert.alert(
+      'Clear History',
+      'This will permanently delete all scan records.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear All', style: 'destructive', onPress: clearHistory },
+      ]
+    )
+  }
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
       <Text style={[styles.heading, { color: colors.textPrimary, borderBottomColor: colors.border }]}>
         Scan History
       </Text>
-      {history.length === 0 ? (
+
+      {loading ? (
+        <ActivityIndicator style={styles.spinner} color={colors.textSecondary} />
+      ) : history.length === 0 ? (
         <EmptyState
           icon="lock-closed-outline"
           title="No scans yet"
@@ -73,8 +85,8 @@ export default function HistoryScreen() {
             </View>
           )}
           ListFooterComponent={
-            <TouchableOpacity onPress={clearHistory} style={styles.clearBtn}>
-              <Text style={styles.clearText}>Clear History</Text>
+            <TouchableOpacity onPress={confirmClear} style={styles.clearBtn}>
+              <Text style={[styles.clearText, { color: colors.textMuted }]}>Clear History</Text>
             </TouchableOpacity>
           }
         />
@@ -86,6 +98,7 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   heading: { fontSize: 22, fontWeight: '700', padding: 16, borderBottomWidth: 1 },
+  spinner: { marginTop: 60 },
   list: { padding: 16, paddingBottom: 32 },
   entry: {
     flexDirection: 'row',
@@ -102,5 +115,5 @@ const styles = StyleSheet.create({
   scoreDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   entryScore: { fontSize: 16, fontWeight: '700', marginRight: 4 },
   clearBtn: { alignItems: 'center', paddingVertical: 16 },
-  clearText: { color: '#C0392B', fontSize: 14, fontWeight: '600' },
+  clearText: { fontSize: 12, fontWeight: '600' },
 })

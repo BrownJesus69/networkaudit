@@ -38,6 +38,7 @@ export interface NetworkInfo {
   deviceIP: string
   dnsServers: string[]
   isConnected: boolean
+  bssid?: string
 }
 
 export interface ScanHistoryEntry {

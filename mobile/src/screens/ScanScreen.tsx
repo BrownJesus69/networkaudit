@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   View,
   Text,
@@ -11,22 +11,29 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../context/ThemeContext'
+import { useNetworkInfo } from '../hooks/useNetworkInfo'
 import { useNetworkScan } from '../hooks/useNetworkScan'
 import { SeverityCard } from '../components/SeverityCard'
 import { RiskGauge } from '../components/RiskGauge'
 import { NetworkInfoPill } from '../components/NetworkInfoPill'
 import { SkeletonCard } from '../components/SkeletonCard'
+import { EmptyState } from '../components/EmptyState'
 
 export default function ScanScreen() {
   const { colors, isDark, toggle } = useTheme()
-  const { loading, result, networkInfo, error, runScan, loadNetworkInfo } = useNetworkScan()
+  const { networkInfo, loading: netLoading, refetch } = useNetworkInfo()
+  const { loading, result, error, runScan, reset } = useNetworkScan()
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    loadNetworkInfo()
-  }, [loadNetworkInfo])
+  const urgentCount = result?.findings.filter(
+    f => f.severity === 'CRITICAL' || f.severity === 'HIGH'
+  ).length ?? 0
 
-  const criticalCount =
-    result?.findings.filter(f => f.severity === 'CRITICAL' || f.severity === 'HIGH').length ?? 0
+  async function onRefresh() {
+    setRefreshing(true)
+    await refetch()
+    setRefreshing(false)
+  }
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
@@ -36,28 +43,31 @@ export default function ScanScreen() {
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Wi-Fi Security Scanner</Text>
         </View>
         <TouchableOpacity onPress={toggle} style={styles.themeBtn}>
-          <Ionicons name={isDark ? 'sunny' : 'moon'} size={22} color={colors.textPrimary} />
+          <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={22} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={runScan} tintColor={colors.textPrimary} />
+          <RefreshControl refreshing={refreshing || netLoading} onRefresh={onRefresh} tintColor={colors.textPrimary} />
         }
       >
-        <NetworkInfoPill networkInfo={networkInfo} onRefresh={loadNetworkInfo} />
+        <NetworkInfoPill networkInfo={networkInfo} onRefresh={refetch} />
 
-        {Boolean(error) && !networkInfo && (
-          <View style={[styles.warningCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Ionicons name="warning-outline" size={20} color="#C17D3C" />
-            <Text style={[styles.warningText, { color: colors.textPrimary }]}>{error}</Text>
+        {Boolean(error) && (
+          <View style={[styles.errorCard, { backgroundColor: colors.surface, borderColor: '#C0392B' }]}>
+            <Ionicons name="warning-outline" size={20} color="#C0392B" />
+            <Text style={[styles.errorText, { color: colors.textPrimary }]}>{error}</Text>
+            <TouchableOpacity onPress={reset} style={styles.dismissBtn}>
+              <Text style={styles.dismissText}>Dismiss</Text>
+            </TouchableOpacity>
           </View>
         )}
 
         <TouchableOpacity
           style={[styles.scanBtn, { backgroundColor: colors.scanButton }, loading && styles.scanBtnDisabled]}
-          onPress={runScan}
+          onPress={() => { if (!loading && networkInfo) runScan(networkInfo) }}
           disabled={loading}
           activeOpacity={0.8}
         >
@@ -73,17 +83,6 @@ export default function ScanScreen() {
           )}
         </TouchableOpacity>
 
-        {result != null && (
-          <View style={[styles.scoreCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>RISK SCORE</Text>
-            <RiskGauge score={result.overallScore} />
-            <Text style={[styles.findingSummary, { color: colors.textSecondary }]}>
-              {result.findings.length} finding{result.findings.length !== 1 ? 's' : ''} ·{' '}
-              {criticalCount} require immediate action
-            </Text>
-          </View>
-        )}
-
         {loading && (
           <>
             <Text style={[styles.sectionLabel, { color: colors.textSecondary, borderBottomColor: colors.border }]}>
@@ -97,20 +96,36 @@ export default function ScanScreen() {
 
         {result != null && (
           <>
+            <View style={[styles.scoreCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>RISK SCORE</Text>
+              <RiskGauge score={result.overallScore} />
+              <Text style={[styles.findingSummary, { color: colors.textSecondary }]}>
+                {result.findings.length} finding{result.findings.length !== 1 ? 's' : ''} · {urgentCount} require immediate action
+              </Text>
+            </View>
+
             <Text style={[styles.sectionLabel, { color: colors.textSecondary, borderBottomColor: colors.border }]}>
-              FINDINGS
+              FINDINGS <Text style={styles.badge}>{result.findings.length}</Text>
             </Text>
+
             {result.findings.length === 0 ? (
-              <View style={[styles.cleanCard, { backgroundColor: '#4CAF7D20', borderColor: '#4CAF7D' }]}>
-                <Ionicons name="checkmark-circle" size={20} color="#4CAF7D" />
-                <Text style={[styles.cleanText, { color: '#4CAF7D', marginLeft: 10 }]}>
-                  No issues found. Your network looks secure.
-                </Text>
-              </View>
+              <EmptyState
+                icon="shield-checkmark-outline"
+                title="Network Looks Secure"
+                subtitle="No issues detected on this network"
+              />
             ) : (
               result.findings.map(f => <SeverityCard key={f.id} finding={f} />)
             )}
           </>
+        )}
+
+        {result == null && !loading && (
+          <EmptyState
+            icon="shield-outline"
+            title="Ready to Scan"
+            subtitle="Tap the button above to analyse your current Wi-Fi network"
+          />
         )}
       </ScrollView>
     </SafeAreaView>
@@ -131,15 +146,18 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, marginTop: 2 },
   themeBtn: { padding: 4 },
   content: { padding: 16, paddingBottom: 32 },
-  warningCard: {
+  errorCard: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
     borderWidth: 1,
     padding: 14,
     marginBottom: 16,
+    gap: 10,
   },
-  warningText: { flex: 1, fontSize: 14, marginLeft: 10 },
+  errorText: { flex: 1, fontSize: 14 },
+  dismissBtn: { paddingHorizontal: 4 },
+  dismissText: { color: '#C0392B', fontSize: 13, fontWeight: '600' },
   scanBtn: {
     height: 56,
     borderRadius: 12,
@@ -161,6 +179,5 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     borderBottomWidth: 1,
   },
-  cleanCard: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, padding: 14 },
-  cleanText: { fontSize: 14, fontWeight: '600', flex: 1 },
+  badge: { fontSize: 10, fontWeight: '700' },
 })

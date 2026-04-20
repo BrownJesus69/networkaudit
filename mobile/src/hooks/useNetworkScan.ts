@@ -1,83 +1,70 @@
 import { useState, useCallback } from 'react'
-import NetInfo from '@react-native-community/netinfo'
-import * as Network from 'expo-network'
+import * as Haptics from 'expo-haptics'
 import { postScan } from '../services/api'
 import { useScanHistory } from './useScanHistory'
 import type { ScanResult, NetworkInfo } from '../types/index'
 
-function deriveGateway(ip: string): string {
-  const parts = ip.split('.')
-  return parts.length === 4 ? `${parts[0]}.${parts[1]}.${parts[2]}.1` : '192.168.1.1'
+const OUI_MAP: Record<string, string> = {
+  '00:50:f2': 'TP-Link', '00:e0:4c': 'TP-Link', 'f8:1a:67': 'TP-Link',
+  '00:26:5a': 'D-Link',  '28:10:7b': 'D-Link',  '00:1b:11': 'D-Link',
+  '00:14:6c': 'Netgear', '20:4e:7f': 'Netgear', 'a0:21:b7': 'Netgear',
+  '00:50:7f': 'Linksys', '00:1c:10': 'Linksys', '30:85:a9': 'Linksys',
+  '00:1a:1e': 'Asus',    'ac:9e:17': 'Asus',    '00:0c:e7': 'Asus',
+}
+
+function guessVendor(bssid: string | undefined): string | undefined {
+  if (!bssid) return undefined
+  const oui = bssid.substring(0, 8).toLowerCase()
+  return OUI_MAP[oui]
 }
 
 interface ScanState {
   loading: boolean
   result: ScanResult | null
-  networkInfo: NetworkInfo | null
   error: string | null
 }
 
 export function useNetworkScan() {
-  const [state, setState] = useState<ScanState>({ loading: false, result: null, networkInfo: null, error: null })
-  const { saveEntry } = useScanHistory()
+  const [state, setState] = useState<ScanState>({ loading: false, result: null, error: null })
+  const { addEntry } = useScanHistory()
 
-  const loadNetworkInfo = useCallback(async () => {
+  const runScan = useCallback(async (networkInfo: NetworkInfo) => {
+    if (!networkInfo.isConnected) {
+      setState(s => ({ ...s, error: 'Connect to a Wi-Fi network to scan' }))
+      return
+    }
+    setState({ loading: true, error: null, result: null })
     try {
-      const netState = await NetInfo.fetch()
-      if (netState.type !== 'wifi' || !netState.isConnected) return
-      const details = netState.details as { ssid?: string | null; ipAddress?: string | null } | null
-      const deviceIP = details?.ipAddress ?? '192.168.1.100'
-      let expoIP = deviceIP
-      try { expoIP = await Network.getIpAddressAsync() } catch { /* use fallback */ }
-      const finalIP = expoIP || deviceIP
-      const info: NetworkInfo = {
-        ssid: details?.ssid ?? null,
-        securityType: 'UNKNOWN',
-        gatewayIP: deriveGateway(finalIP),
-        deviceIP: finalIP,
-        dnsServers: ['8.8.8.8'],
-        isConnected: true,
-      }
-      setState(s => ({ ...s, networkInfo: info }))
-    } catch { /* silent fail */ }
-  }, [])
-
-  const runScan = useCallback(async () => {
-    setState(s => ({ ...s, loading: true, error: null }))
-    try {
-      const netState = await NetInfo.fetch()
-      if (netState.type !== 'wifi' || !netState.isConnected) {
-        setState(s => ({ ...s, loading: false, error: 'Connect to a Wi-Fi network to scan' }))
-        return
-      }
-      const details = netState.details as { ssid?: string | null; ipAddress?: string | null } | null
-      const deviceIP = details?.ipAddress ?? '192.168.1.100'
-      let expoIP = deviceIP
-      try { expoIP = await Network.getIpAddressAsync() } catch { /* use fallback */ }
-      const finalIP = expoIP || deviceIP
-      const networkInfo: NetworkInfo = {
-        ssid: details?.ssid ?? null,
-        securityType: 'UNKNOWN',
-        gatewayIP: deriveGateway(finalIP),
-        deviceIP: finalIP,
-        dnsServers: ['8.8.8.8'],
-        isConnected: true,
-      }
-      setState(s => ({ ...s, networkInfo }))
-      const result = await postScan({
+      const scanInput = {
         securityType: networkInfo.securityType,
         gatewayIP: networkInfo.gatewayIP,
         dnsServers: networkInfo.dnsServers,
         deviceIP: networkInfo.deviceIP,
-        ssid: networkInfo.ssid ?? undefined,
+        ...(networkInfo.ssid != null ? { ssid: networkInfo.ssid } : {}),
+        routerVendor: guessVendor(networkInfo.bssid),
+      }
+      const result = await postScan(scanInput)
+      await addEntry({
+        id: Date.now().toString(),
+        scannedAt: result.scannedAt,
+        ssid: networkInfo.ssid,
+        overallScore: result.overallScore,
+        findings: result.findings,
+        networkInfo,
       })
-      await saveEntry(result, networkInfo)
-      setState(s => ({ ...s, loading: false, result }))
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Scan failed. Please try again.'
-      setState(s => ({ ...s, loading: false, error: msg }))
+      setState({ loading: false, result, error: null })
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } } | null
+      const msg = axiosErr?.response?.data?.error ?? (err instanceof Error ? err.message : 'Network error. Is the backend running?')
+      setState({ loading: false, result: null, error: msg })
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
     }
-  }, [saveEntry])
+  }, [addEntry])
 
-  return { ...state, runScan, loadNetworkInfo }
+  const reset = useCallback(() => {
+    setState({ loading: false, result: null, error: null })
+  }, [])
+
+  return { ...state, runScan, reset }
 }
