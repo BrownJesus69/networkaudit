@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { View, Text, TouchableOpacity, Animated, Easing, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, Animated, Easing, Linking, StyleSheet } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import * as Clipboard from 'expo-clipboard'
+import * as Haptics from 'expo-haptics'
 import { useTheme } from '../context/ThemeContext'
 import { SeverityColors } from '../constants/Colors'
 import type { Finding } from '../types/index'
@@ -25,6 +28,11 @@ export function SeverityCard({ finding, expanded: initial = false }: Props) {
     }).start()
   }, [expanded, expandAnim])
 
+  async function onTitleLongPress() {
+    await Clipboard.setStringAsync(finding.title)
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+  }
+
   return (
     <TouchableOpacity
       activeOpacity={0.8}
@@ -41,7 +49,13 @@ export function SeverityCard({ finding, expanded: initial = false }: Props) {
             CVSS {finding.cvssScore.toFixed(1)}
           </Text>
         </View>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>{finding.title}</Text>
+        <Text
+          style={[styles.title, { color: colors.textPrimary }]}
+          onLongPress={onTitleLongPress}
+          suppressHighlighting
+        >
+          {finding.title}
+        </Text>
         <Text
           style={[styles.desc, { color: colors.textMuted }]}
           numberOfLines={expanded ? undefined : 2}
@@ -55,14 +69,19 @@ export function SeverityCard({ finding, expanded: initial = false }: Props) {
           }}
         >
           <View style={[styles.remBox, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.remText, { color: remColor }]}>→ {finding.remediation}</Text>
+            <Ionicons name="construct-outline" size={12} color={remColor} style={styles.remIcon} />
+            <Text style={[styles.remText, { color: remColor }]}>{finding.remediation}</Text>
           </View>
           {finding.cveIds && finding.cveIds.length > 0 && (
             <View style={styles.cveRow}>
               {finding.cveIds.map(id => (
-                <View key={id} style={styles.cvePill}>
+                <TouchableOpacity
+                  key={id}
+                  style={styles.cvePill}
+                  onPress={() => Linking.openURL(`https://nvd.nist.gov/vuln/detail/${id}`).catch(() => null)}
+                >
                   <Text style={styles.cveText}>{id}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -88,8 +107,9 @@ const styles = StyleSheet.create({
   cvss: { fontSize: 10 },
   title: { fontSize: 14, fontWeight: '700', marginTop: 6 },
   desc: { fontSize: 12, lineHeight: 18, marginTop: 4 },
-  remBox: { borderRadius: 8, padding: 10, marginTop: 8 },
-  remText: { fontSize: 11, lineHeight: 16 },
+  remBox: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 8, padding: 10, marginTop: 8 },
+  remIcon: { marginRight: 6, marginTop: 2 },
+  remText: { flex: 1, fontSize: 11, lineHeight: 16 },
   cveRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
   cvePill: {
     backgroundColor: '#4A7FB5',

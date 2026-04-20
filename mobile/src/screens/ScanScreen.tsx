@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   RefreshControl,
+  Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -21,11 +22,44 @@ import { EmptyState } from '../components/EmptyState'
 import { shareReport } from '../utils/shareReport'
 import type { ScanHistoryEntry } from '../types/index'
 
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  return (
+    d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) +
+    ', ' +
+    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  )
+}
+
 export default function ScanScreen() {
   const { colors, isDark, toggle } = useTheme()
   const { networkInfo, loading: netLoading, refetch } = useNetworkInfo()
   const { loading, result, error, runScan, reset } = useNetworkScan()
   const [refreshing, setRefreshing] = useState(false)
+
+  const slideAnim = useRef(new Animated.Value(-30)).current
+  const errorOpacity = useRef(new Animated.Value(0)).current
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const dismissError = useCallback(() => {
+    reset()
+  }, [reset])
+
+  useEffect(() => {
+    if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
+    if (error) {
+      slideAnim.setValue(-30)
+      errorOpacity.setValue(0)
+      Animated.parallel([
+        Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(errorOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start()
+      dismissTimerRef.current = setTimeout(dismissError, 8000)
+    }
+    return () => {
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
+    }
+  }, [error, slideAnim, errorOpacity, dismissError])
 
   const urgentCount = result?.findings.filter(
     f => f.severity === 'CRITICAL' || f.severity === 'HIGH'
@@ -50,6 +84,11 @@ export default function ScanScreen() {
       networkInfo,
     }
     void shareReport(entry)
+  }
+
+  function onScanAgain() {
+    reset()
+    if (networkInfo) runScan(networkInfo)
   }
 
   return (
@@ -80,13 +119,27 @@ export default function ScanScreen() {
         <NetworkInfoPill networkInfo={networkInfo} onRefresh={refetch} />
 
         {Boolean(error) && (
-          <View style={[styles.errorCard, { backgroundColor: colors.surface, borderColor: '#C0392B' }]}>
+          <Animated.View
+            style={[
+              styles.errorCard,
+              { backgroundColor: colors.surface, borderColor: '#C0392B' },
+              { transform: [{ translateY: slideAnim }], opacity: errorOpacity },
+            ]}
+          >
             <Ionicons name="warning-outline" size={20} color="#C0392B" />
             <Text style={[styles.errorText, { color: colors.textPrimary }]}>{error}</Text>
-            <TouchableOpacity onPress={reset} style={styles.dismissBtn}>
+            <TouchableOpacity onPress={dismissError} style={styles.errorActionBtn}>
               <Text style={styles.dismissText}>Dismiss</Text>
             </TouchableOpacity>
-          </View>
+            {networkInfo && (
+              <TouchableOpacity
+                onPress={() => { dismissError(); runScan(networkInfo) }}
+                style={styles.errorActionBtn}
+              >
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            )}
+          </Animated.View>
         )}
 
         {isOffline ? (
@@ -135,14 +188,20 @@ export default function ScanScreen() {
             <View style={[styles.scoreCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>RISK SCORE</Text>
               <RiskGauge score={result.overallScore} />
+              <Text style={[styles.lastScanned, { color: colors.textSecondary }]}>
+                Last scanned: {formatDate(result.scannedAt)}
+              </Text>
               <Text style={[styles.findingSummary, { color: colors.textSecondary }]}>
                 {result.findings.length} finding{result.findings.length !== 1 ? 's' : ''} · {urgentCount} require immediate action
               </Text>
             </View>
 
-            <Text style={[styles.sectionLabel, { color: colors.textSecondary, borderBottomColor: colors.border }]}>
-              FINDINGS {result.findings.length}
-            </Text>
+            <View style={[styles.sectionLabelRow, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.sectionLabelText, { color: colors.textSecondary }]}>FINDINGS</Text>
+              <View style={[styles.countBadge, { backgroundColor: colors.textPrimary }]}>
+                <Text style={[styles.countBadgeText, { color: colors.card }]}>{result.findings.length}</Text>
+              </View>
+            </View>
 
             {result.findings.length === 0 ? (
               <EmptyState
@@ -153,6 +212,14 @@ export default function ScanScreen() {
             ) : (
               result.findings.map(f => <SeverityCard key={f.id} finding={f} />)
             )}
+
+            <TouchableOpacity
+              style={[styles.scanAgainBtn, { borderColor: colors.textSecondary }]}
+              onPress={onScanAgain}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.scanAgainText, { color: colors.textSecondary }]}>Scan Again</Text>
+            </TouchableOpacity>
           </>
         )}
 
@@ -190,11 +257,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     marginBottom: 16,
-    gap: 10,
+    gap: 8,
   },
-  errorText: { flex: 1, fontSize: 14 },
-  dismissBtn: { paddingHorizontal: 4 },
-  dismissText: { color: '#C0392B', fontSize: 13, fontWeight: '600' },
+  errorText: { flex: 1, fontSize: 13 },
+  errorActionBtn: { paddingHorizontal: 4 },
+  dismissText: { color: '#C0392B', fontSize: 12, fontWeight: '600' },
+  retryText: { color: '#4A7FB5', fontSize: 12, fontWeight: '600' },
   offlineCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -217,7 +285,8 @@ const styles = StyleSheet.create({
   scanBtnText: { fontSize: 16, fontWeight: '700' },
   scoreCard: { borderRadius: 12, borderWidth: 1, padding: 16, marginBottom: 16 },
   cardLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 },
-  findingSummary: { fontSize: 12, marginTop: 8 },
+  lastScanned: { fontSize: 11, fontStyle: 'italic', marginTop: 8 },
+  findingSummary: { fontSize: 12, marginTop: 4 },
   sectionLabel: {
     fontSize: 10,
     fontWeight: '700',
@@ -226,4 +295,24 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     borderBottomWidth: 1,
   },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    gap: 8,
+  },
+  sectionLabelText: { fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  countBadge: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  countBadgeText: { fontSize: 9, fontWeight: '700' },
+  scanAgainBtn: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  scanAgainText: { fontSize: 14, fontWeight: '600' },
 })

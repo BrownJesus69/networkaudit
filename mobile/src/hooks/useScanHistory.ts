@@ -38,11 +38,24 @@ export function useScanHistory() {
     }
   }, [increment])
 
+  const deleteEntry = useCallback(async (id: string) => {
+    try {
+      const raw = await AsyncStorage.getItem(HISTORY_KEY)
+      const existing: ScanHistoryEntry[] = raw ? (JSON.parse(raw) as ScanHistoryEntry[]) : []
+      const updated = existing.filter(e => e.id !== id)
+      await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
+      setHistory(updated)
+      setCount(updated.length)
+    } catch (err) {
+      console.error('Failed to delete entry:', err)
+    }
+  }, [setCount])
+
   const clearHistory = useCallback(async () => {
     await AsyncStorage.removeItem(HISTORY_KEY)
     setHistory([])
     setCount(0)
   }, [setCount])
 
-  return { history, loading, loadHistory, addEntry, clearHistory }
+  return { history, loading, loadHistory, addEntry, deleteEntry, clearHistory }
 }

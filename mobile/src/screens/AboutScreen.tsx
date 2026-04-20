@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../context/ThemeContext'
 
 const APP_VERSION = '1.0.0'
+const BUILD_NUMBER = '1'
 
 const HOW_IT_WORKS = [
   { step: 1, text: 'App collects Wi-Fi metadata (SSID, security type, gateway IP, DNS)' },
@@ -41,7 +42,9 @@ export default function AboutScreen() {
           <Text style={[styles.tagline, { color: colors.textSecondary }]}>
             Know your network. Own your security.
           </Text>
-          <Text style={[styles.versionText, { color: colors.textMuted }]}>v{APP_VERSION}</Text>
+          <Text style={[styles.versionText, { color: colors.textSecondary }]}>
+            Version {APP_VERSION} · Build {BUILD_NUMBER}
+          </Text>
         </View>
 
         {/* How it works */}
@@ -49,8 +52,8 @@ export default function AboutScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>How It Works</Text>
           {HOW_IT_WORKS.map(({ step, text }) => (
             <View key={step} style={styles.stepRow}>
-              <View style={[styles.stepBadge, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.stepNum, { color: colors.textPrimary }]}>{step}</Text>
+              <View style={[styles.stepBadge, { backgroundColor: colors.textPrimary }]}>
+                <Text style={[styles.stepNum, { color: colors.card }]}>{step}</Text>
               </View>
               <Text style={[styles.stepText, { color: colors.textSecondary }]}>{text}</Text>
             </View>
@@ -87,8 +90,13 @@ export default function AboutScreen() {
 
         {/* Privacy */}
         <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Privacy</Text>
-          <Text style={[styles.body, { color: colors.textSecondary }]}>
+          <View style={styles.privacyHeader}>
+            <Ionicons name="shield-checkmark-outline" size={20} color="#4CAF7D" />
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 0, marginLeft: 8 }]}>
+              Privacy
+            </Text>
+          </View>
+          <Text style={[styles.body, { color: colors.textSecondary, marginTop: 12 }]}>
             We never store your SSID or personal data. Gateway IPs are SHA256-hashed before storage.
             No user accounts. No tracking. All analysis is based on metadata your device already knows.
           </Text>
@@ -107,8 +115,10 @@ export default function AboutScreen() {
         </View>
 
         <Text style={[styles.footer, { color: colors.textMuted }]}>
-          NetworkAudit v{APP_VERSION} · Build 1
+          NetworkAudit v{APP_VERSION} · Build {BUILD_NUMBER}
         </Text>
+        <View style={[styles.mitDivider, { backgroundColor: colors.border }]} />
+        <Text style={[styles.mitText, { color: colors.textMuted }]}>MIT Licensed · Open Source</Text>
       </ScrollView>
     </SafeAreaView>
   )
@@ -136,24 +146,27 @@ const styles = StyleSheet.create({
   },
   appName: { fontSize: 22, fontWeight: '700', alignSelf: 'center' },
   tagline: { fontSize: 13, marginTop: 4, alignSelf: 'center', textAlign: 'center' },
-  versionText: { fontSize: 12, marginTop: 4, alignSelf: 'center' },
+  versionText: { fontSize: 11, marginTop: 6, alignSelf: 'center' },
   sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
+  privacyHeader: { flexDirection: 'row', alignItems: 'center' },
   stepRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   stepBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
     flexShrink: 0,
   },
-  stepNum: { fontSize: 13, fontWeight: '700' },
+  stepNum: { fontSize: 12, fontWeight: '700' },
   stepText: { flex: 1, fontSize: 13, lineHeight: 20 },
   body: { fontSize: 13, lineHeight: 20 },
   linkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   linkText: { color: '#4A7FB5', fontSize: 14, marginLeft: 6 },
   apiRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, width: '100%' },
   apiBullet: { width: 6, height: 6, borderRadius: 3, marginRight: 10 },
-  footer: { textAlign: 'center', fontSize: 12, marginTop: 8 },
+  footer: { textAlign: 'center', fontSize: 12, marginTop: 8, width: '100%' },
+  mitDivider: { height: 1, width: '40%', alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  mitText: { fontSize: 11, textAlign: 'center', width: '100%' },
 })

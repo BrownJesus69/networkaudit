@@ -9,8 +9,10 @@ interface Props {
 }
 
 function scoreLabel(score: number): string {
-  if (score >= 8) return 'Secure'
-  if (score >= 5) return 'Moderate'
+  if (score >= 9.0) return 'Secure'
+  if (score >= 7.0) return 'Low Risk'
+  if (score >= 5.0) return 'Moderate'
+  if (score >= 3.0) return 'High Risk'
   return 'At Risk'
 }
 

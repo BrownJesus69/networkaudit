@@ -1,12 +1,59 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import * as Clipboard from 'expo-clipboard'
 import { useTheme } from '../context/ThemeContext'
-import type { NetworkInfo } from '../types/index'
+import type { NetworkInfo, SecurityType } from '../types/index'
 
 interface Props {
   networkInfo: NetworkInfo | null
   onRefresh?: () => void
+}
+
+const SECURITY_COLORS: Record<SecurityType, string | null> = {
+  WPA3: '#4CAF7D',
+  WPA2: '#4A7FB5',
+  WPA: '#C17D3C',
+  WEP: '#C0392B',
+  NONE: '#C0392B',
+  'WPA2-Enterprise': '#4A7FB5',
+  UNKNOWN: null,
+}
+
+function SecurityBadge({ type }: { type: SecurityType }) {
+  const { colors } = useTheme()
+  const bg = SECURITY_COLORS[type]
+  if (bg) {
+    return (
+      <View style={[styles.secBadge, { backgroundColor: bg }]}>
+        <Text style={styles.secBadgeText}>{type}</Text>
+      </View>
+    )
+  }
+  return (
+    <View style={[styles.secBadge, { borderWidth: 1, borderColor: colors.border }]}>
+      <Text style={[styles.secBadgeText, { color: colors.textSecondary }]}>{type}</Text>
+    </View>
+  )
+}
+
+function GatewayIP({ ip }: { ip: string }) {
+  const { colors } = useTheme()
+  const [copied, setCopied] = useState(false)
+
+  async function onPress() {
+    await Clipboard.setStringAsync(ip)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.6}>
+      <Text style={[styles.gatewayText, { color: colors.textSecondary }]}>
+        {copied ? 'Copied!' : ip}
+      </Text>
+    </TouchableOpacity>
+  )
 }
 
 export function NetworkInfoPill({ networkInfo, onRefresh }: Props) {
@@ -34,9 +81,11 @@ export function NetworkInfoPill({ networkInfo, onRefresh }: Props) {
             {networkInfo.ssid ?? 'Unknown Network'}
           </Text>
         </View>
-        <Text style={[styles.detail, { color: colors.textSecondary }]}>
-          {networkInfo.securityType} · {networkInfo.gatewayIP}
-        </Text>
+        <View style={styles.detailRow}>
+          <SecurityBadge type={networkInfo.securityType} />
+          <Text style={[styles.detailSep, { color: colors.textMuted }]}> · </Text>
+          <GatewayIP ip={networkInfo.gatewayIP} />
+        </View>
       </View>
       {onRefresh != null && (
         <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
@@ -56,10 +105,14 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
-  topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  detailRow: { flexDirection: 'row', alignItems: 'center' },
   liveBadge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginRight: 8 },
   liveText: { color: '#FFFFFF', fontSize: 9, fontWeight: '700' },
   ssid: { fontSize: 14, fontWeight: '700', flex: 1 },
-  detail: { fontSize: 12 },
+  secBadge: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  secBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '700' },
+  detailSep: { fontSize: 12 },
+  gatewayText: { fontSize: 12 },
   refreshBtn: { padding: 4 },
 })

@@ -6,7 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { Ionicons } from '@expo/vector-icons'
-import { View } from 'react-native'
+import { View, KeyboardAvoidingView, Platform } from 'react-native'
 import { ThemeProvider, useTheme } from './src/context/ThemeContext'
 import { ScanCountProvider, useScanCount } from './src/context/ScanCountContext'
 import ScanScreen from './src/screens/ScanScreen'
@@ -98,7 +98,12 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <ScanCountProvider>
-          <Navigation />
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <Navigation />
+          </KeyboardAvoidingView>
         </ScanCountProvider>
       </ThemeProvider>
     </SafeAreaProvider>
