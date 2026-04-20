@@ -34,8 +34,8 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction): void 
 
 testConnection()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(`NetworkAudit API running on port ${PORT}`)
+    app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`NetworkAudit API running on port ${PORT}`)
     })
   })
   .catch((err: unknown) => {
