@@ -4,3 +4,4 @@ dist/
 *.log
 backend/.env
 mobile/.env
+.DS_Store
